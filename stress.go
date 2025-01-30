@@ -54,7 +54,7 @@ func fetch(i int) {
 			fmt.Println(err)
 			return
 		}
-		// Check if the URL contains "/api" and add headers
+		// Check if the URL contains "/api" and add headers and data
 		if strings.Contains(targetUrl, "/api") {
 			// Load headers from a JSON file
 			headers, err := loadHeaders("headers.json")
@@ -66,6 +66,11 @@ func fetch(i int) {
 			for key, value := range headers {
 				req.Header.Add(key, value)
 			}
+
+			// Add the data payload
+			req.Method = "POST"
+			req.Header.Set("Content-Type", "application/json")
+			req.Body = io.NopCloser(strings.NewReader(`{"action":"get_stats"}`))
 		}
 
 		resp, err = myClient.Do(req)
@@ -89,7 +94,7 @@ func fetch(i int) {
 	if resp != nil {
 		defer resp.Body.Close()
 
-		if resp.StatusCode == 429 {
+		if resp.StatusCode == 400 {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
 				fmt.Println("Error reading response body:", err)

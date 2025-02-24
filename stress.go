@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -34,7 +35,7 @@ var (
 
 var limiter = rate.NewLimiter(rate.Every(time.Second/100), 1)
 
-func fetch(i int) {
+func fetch() {
 	if err := limiter.Wait(context.Background()); err != nil {
 		fmt.Println("Error waiting for rate limiter:", err)
 		return
@@ -130,6 +131,19 @@ func loadHeaders(filename string) (map[string]string, error) {
 	return headers, nil
 }
 
+func calculatePercentile(durations []time.Duration, percentile float64) time.Duration {
+	if len(durations) == 0 {
+		return 0
+	}
+
+	sort.Slice(durations, func(i, j int) bool {
+		return durations[i] < durations[j]
+	})
+
+	index := int(math.Ceil(percentile/100.0*float64(len(durations)))) - 1
+	return durations[index]
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: go run stress.go <url>")
@@ -143,7 +157,7 @@ func main() {
 	wg.Add(totalRequests)
 
 	for i := 0; i < totalRequests; i++ {
-		go fetch(i)
+		go fetch()
 	}
 	wg.Wait()
 
@@ -157,6 +171,7 @@ func main() {
 	averageResponseTime := totalResponseTime / time.Duration(len(responseTimes))
 	averageRequestRate := float64(totalRequests) / totalElapsed.Seconds()
 	successRate := float64(successCount) / float64(totalRequests) * 100
+	percentile99 := calculatePercentile(responseTimes, 99)
 
 	parsedUrl, err := url.Parse(targetUrl)
 	if err != nil {
@@ -178,5 +193,6 @@ func main() {
 	fmt.Fprintf(w, "Total execution time\t%.2f sec\n", math.Round(totalElapsed.Seconds()*100)/100)
 	fmt.Fprintf(w, "Average response time\t%.2f sec\n", math.Round(averageResponseTime.Seconds()*100)/100)
 	fmt.Fprintf(w, "Average request rate\t%.2f requests/second\n", averageRequestRate)
+	fmt.Fprintf(w, "99th percentile response time\t%.2f sec\n", math.Round(percentile99.Seconds()*100)/100)
 	w.Flush()
 }
